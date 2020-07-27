@@ -5,6 +5,8 @@ from discord.ext import commands
 However, you must put "bot.remove_command('help')" in your bot, and the command must be in a cog for it to work.
 Written by Jared Newsom (AKA Jared M.F.)! - edited by ceron21"""
 
+"""Note by CDWimmer: It needs work. lol. Do not use yet."""
+
 
 class Help(commands.Cog):
     def __init__(self, bot):
