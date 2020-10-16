@@ -3,4 +3,4 @@
 # Dot
 A Discord bot using [discord.py](https://github.com/Rapptz/discord.py). Intended for use on a single server, might change that in future!
 
-
+`cogs/info.py` requires you to enable intents for presences and members.
