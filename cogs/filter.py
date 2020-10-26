@@ -1,14 +1,19 @@
 # coding: utf-8
-
 """
 Word Filter cog for Dot the Discord bot.
-Version 2020.10.26
+Version 2020.10.26b
 
-Ensure that the bot has a log channel set up from Config Manager (!config logs getchannel) for this to send logs into.
+A Configurable per-server word filter.
+
+Ensure that the bot has a log channel set up from Config Manager for this to send logs into.
+
+Dependencies:
+-------------
+- Config Manager (configmgr.py) cog
+
 """
 
 from collections import defaultdict
-
 from discord.ext import commands
 import discord
 import sqlite3
@@ -17,17 +22,19 @@ CONFIG_FILE = "config_db.db"
 FILTER_FILE = "filter_db.db"
 
 
-# TODO: Test it all works!?
+# TODO: Fix it so it doesn't delete your command message that just removed a word from the whitelist or added a major
+#  filter word.
 
 
 class WordFilter(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
+        print("[WordFilter] Starting Cog...")
         self.bot = bot
         self.major_filter = {}
         self.minor_filter = {}
         self.whitelist = {}
-        # Connect to the config DB
+        # Connect to the config DB:
         self.config_conn = None
         try:
             self.config_conn = sqlite3.connect(CONFIG_FILE)
@@ -35,7 +42,8 @@ class WordFilter(commands.Cog):
             raise Exception(f"Connection to global config database failed! {str(e)}")
         else:
             pass  # all's good.
-        # Check DB Connection
+
+        # Connect to word filter DB:
         self.conn = None
         try:
             self.conn = sqlite3.connect(FILTER_FILE)
@@ -43,8 +51,32 @@ class WordFilter(commands.Cog):
         except sqlite3.Error as e:
             raise Exception(f"Connection to filter database failed! {str(e)}")
         else:
-            # connected, load words into dicts :)
-            c = self.conn.cursor()
+            # connected, ensure tables exist then try loading words into dicts :)
+            try:
+                c = self.conn.cursor()
+                c.execute("""
+                          CREATE TABLE IF NOT EXISTS minor_filter (
+                          id integer PRIMARY KEY,
+                          guild_id text NOT NULL,
+                          word text NOT NULL)
+                          """)
+                c.execute("""
+                          CREATE TABLE IF NOT EXISTS major_filter (
+                          id integer PRIMARY KEY,
+                          guild_id text NOT NULL,
+                          word text NOT NULL)
+                          """)
+                c.execute("""
+                          CREATE TABLE IF NOT EXISTS whitelist (
+                          id integer PRIMARY KEY,
+                          guild_id text NOT NULL,
+                          word text NOT NULL)
+                          """)
+                self.conn.commit()
+            except sqlite3.Error as e:
+
+                print("[WordFilter] Error creating filter database tables.")
+                raise e
             try:
                 c.execute("SELECT guild_id,word FROM minor_filter")
                 rows_minor = c.fetchall()
@@ -54,9 +86,8 @@ class WordFilter(commands.Cog):
                 rows_whitelist = c.fetchall()
             except sqlite3.Error as e:
                 print(e)
-                pass  # likely the tables dont exist
-            else:
-                print()
+                pass  # likely the tables don't exist
+            else:  # go through and load all the lists into memory:
                 self.minor_filter = defaultdict(list)
                 for r in rows_minor:
                     self.minor_filter[int(r[0])].append(r[1])
@@ -79,9 +110,15 @@ class WordFilter(commands.Cog):
 
     # ============== Word Addition ============ #
 
-    @wordfilter.command(help="Add a word to the minor filter")
+    @wordfilter.group(invoke_without_command=True)
     @commands.has_permissions(ban_members=True)
-    async def addminor(self, ctx, word: str):
+    async def add(self, ctx):
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Invalid or unknown sub-command...")
+
+    @add.command(help="Add a word to the minor filter", name='minor')
+    @commands.has_permissions(ban_members=True)
+    async def add_minor(self, ctx, word: str):
         word = word.lower()
         if word not in self.minor_filter[ctx.guild.id]:
             try:
@@ -96,9 +133,9 @@ class WordFilter(commands.Cog):
         else:
             await ctx.send("Word already in minor list.")
 
-    @wordfilter.command(help="Add a word to the major filter.")
+    @add.command(help="Add a word to the major filter.", name='major')
     @commands.has_permissions(ban_members=True)
-    async def addmajor(self, ctx, word: str):
+    async def add_major(self, ctx, word: str):
         word = word.lower()
         if word not in self.major_filter[ctx.guild.id]:
             try:
@@ -113,9 +150,9 @@ class WordFilter(commands.Cog):
         else:
             await ctx.send("Word already in major list.")
 
-    @wordfilter.command(help="Add a word to the ignore list/whitelist.")
+    @add.command(help="Add a word to the ignore list/whitelist.", name='whitelist')
     @commands.has_permissions(ban_members=True)
-    async def addwhitelist(self, ctx, word: str):
+    async def add_whitelist(self, ctx, word: str):
         word = word.lower()
         if word not in self.whitelist[ctx.guild.id]:
             try:
@@ -132,9 +169,15 @@ class WordFilter(commands.Cog):
 
     # =========== Word Removal =========== #
 
-    @wordfilter.command(help="Remove a word from the minor filter.")
+    @wordfilter.group(invoke_without_command=True)
     @commands.has_permissions(ban_members=True)
-    async def removeminor(self, ctx, word: str):
+    async def remove(self, ctx):
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Invalid or unknown sub-command...")
+
+    @remove.command(help="Remove a word from the minor filter.", name='minor')
+    @commands.has_permissions(ban_members=True)
+    async def remove_minor(self, ctx, word: str):
         if word in self.minor_filter[ctx.guild.id]:
             try:
                 c = self.conn.cursor()
@@ -148,9 +191,9 @@ class WordFilter(commands.Cog):
         else:
             await ctx.send("Word not in minor list.")
 
-    @wordfilter.command(help="Remove a word from the major filter.")
+    @remove.command(help="Remove a word from the major filter.", name='major')
     @commands.has_permissions(ban_members=True)
-    async def removemajor(self, ctx, word: str):
+    async def remove_major(self, ctx, word: str):
         if word in self.major_filter[ctx.guild.id]:
             try:
                 c = self.conn.cursor()
@@ -164,9 +207,9 @@ class WordFilter(commands.Cog):
         else:
             await ctx.send("Word not in major list.")
 
-    @wordfilter.command(help="Remove a word from the whitelist.")
+    @remove.command(help="Remove a word from the whitelist.", name='whitelist')
     @commands.has_permissions(ban_members=True)
-    async def removewhitelist(self, ctx, word: str):
+    async def remove_whitelist(self, ctx, word: str):
         if word in self.whitelist[ctx.guild.id]:
             try:
                 c = self.conn.cursor()
@@ -182,25 +225,31 @@ class WordFilter(commands.Cog):
 
     # ========== Word Display ============= #
 
-    @wordfilter.command(help="List the words in the minor filter.")
+    @wordfilter.group(invoke_without_command=True)
+    @commands.has_permissions(ban_members=True)
+    async def show(self, ctx):
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Invalid or unknown sub-command...")
+
+    @show.command(help="List the words in the minor filter.", name='minor')
     @commands.has_permissions(kick_members=True)
-    async def showminor(self, ctx):
+    async def show_minor(self, ctx):
         msg = "__Minor Filter Words__\n"
         for word in self.minor_filter[ctx.guild.id]:
             msg += word + " "
         await ctx.send(msg)
 
-    @wordfilter.command(help="List the words in the major filter.")
+    @show.command(help="List the words in the major filter.", name='major')
     @commands.has_permissions(kick_members=True)
-    async def showmajor(self, ctx):
+    async def show_major(self, ctx):
         msg = "__Major Filter Words__\n"
         for word in self.major_filter[ctx.guild.id]:
             msg += word + " "
         await ctx.send(msg)
 
-    @wordfilter.command(help="List the words in the whitelist.")
+    @show.command(help="List the words in the whitelist.", name='whitelist')
     @commands.has_permissions(kick_members=True)
-    async def showwhitelist(self, ctx):
+    async def show_whitelist(self, ctx):
         msg = "__Whitelisted Words__\n"
         for word in self.whitelist[ctx.guild.id]:
             msg += word + " "
@@ -232,15 +281,15 @@ class WordFilter(commands.Cog):
         #  Filter for suspect stuff:
         try:
             if any(x in msg_filtered for x in self.minor_filter[message.guild.id]):  # detected minor word
-                channel = get_log_channel()
-                await channel(f"Word filter detected a potentially minor offensive message:\n"
-                              f"{message.jump_url}\n"
-                              f"Sent by {message.author.display_name}.")
+                channel = get_log_channel()  # helper function
+                await channel.send(f"Word filter detected a potentially minor offensive message:\n"
+                                   f"{message.jump_url}\n"
+                                   f"Sent by {message.author.display_name}.")
         except KeyError:
             pass  # no words configured for that server I guess
         try:
             if any(x in msg_filtered for x in self.major_filter[message.guild.id]):
-                channel = get_log_channel()
+                channel = get_log_channel()  # helper function
                 await channel.send(f"Word filter detected a potentially major offensive message and will delete it.\n"
                                    f"Sent by {message.author.display_name} (id: {message.author.id}).\n"
                                    f"Message read:")
@@ -298,7 +347,7 @@ class WordFilter(commands.Cog):
                                        f"person. "
                                        f"\nError: {str(e)}")
                 except discord.HTTPException:
-                    await channel.send(f"The nickname was on a bot, so I didn't DM them, because Discord doesn't like"
+                    await channel.send(f"The nickname was on a bot, so I did not DM them, because Discord does not like"
                                        f" me doing that. ")
 
     # ================= DB Management ================ #
@@ -309,37 +358,6 @@ class WordFilter(commands.Cog):
         """A bunch of database management commands for the bot owner."""
         if ctx.invoked_subcommand is None:
             await ctx.send('Missing or unknown sub-command...')
-
-    @filterdb.command(help="Create the tables if they don't already exist. BOT OWNER.")
-    @commands.is_owner()
-    async def createtables(self, ctx):
-        try:
-            c = self.conn.cursor()
-            c.execute("""
-                      CREATE TABLE IF NOT EXISTS minor_filter (
-                      id integer PRIMARY KEY,
-                      guild_id text NOT NULL,
-                      word text NOT NULL)
-                      """)
-            c.execute("""
-                      CREATE TABLE IF NOT EXISTS major_filter (
-                      id integer PRIMARY KEY,
-                      guild_id text NOT NULL,
-                      word text NOT NULL)
-                      """)
-            c.execute("""
-                      CREATE TABLE IF NOT EXISTS whitelist (
-                      id integer PRIMARY KEY,
-                      guild_id text NOT NULL,
-                      word text NOT NULL)
-                      """)
-            self.conn.commit()
-        except sqlite3.Error as e:
-            await ctx.send(f"Error creating filter databases:{str(e)}")
-            print(f"[WordFilter] Error created filter database tables:\n{str(e)}")
-            raise e
-        finally:
-            await ctx.send("Done!")
 
     @filterdb.command(help="Show list of DB tables.")
     @commands.is_owner()

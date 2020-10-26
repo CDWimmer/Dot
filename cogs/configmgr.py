@@ -1,8 +1,9 @@
 # coding: utf-8
 """
-Config Management cog for Dot the Discord bot.
-Version 2020.10.26
-This cog is a required part of Dot!
+Config Manager cog for Dot the Discord bot.
+Version 2020.10.26b
+
+This cog is a core part of Dot and should almost always be loaded!
 
 This cog holds commands for the management of server configuration options like log channels which are used by other
 cogs.
@@ -81,36 +82,32 @@ class Config(commands.Cog):
         row = c.fetchall()
         if not row:  # if there was no entry
             await ctx.send(f"There currently isn't a log channel set! "
-                           f"Please set one with `{self.bot.command_prefix}config logs setchannel #channel`")
+                           f"**Please set one** with `{self.bot.command_prefix}config logs setchannel #channel`")
         else:
             await ctx.send(f"The log channel is {ctx.guild.get_channel(int(row[0][0])).mention}.")
-
-    @logs.command(help="Wipe EVERY SERVER'S LOG CHANNEL. DO NOT USE. FUCK.")
-    @commands.is_owner()
-    async def wipe(self, ctx: commands.Context):
-        c = self.conn.cursor()
-        c.execute("DELETE FROM log_channels")
-        self.conn.commit()
-        await ctx.send("WHAT THE FUCK DID YOU DO")
 
     # =============== Events =================== #
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
+        """
+        On joining a guild, go through all the channels and locate one that we can talk in, and declare
+        that to be my log channel for that guild. Remind guild admins that the log channel can be changed.
+        """
         channels = guild.text_channels
         myself = guild.get_member(self.bot.user.id)
         for channel in channels:
             if channel.permissions_for(myself).send_messages:
                 print("found new log channel :)")
                 await channel.send(f"Hello! I'll use this channel as my log channel. "
-                                   f"To change this, run `{self.bot.command_prefix}config logs setchannel [channel]`.")
+                                   f"To change this, run `{self.bot.command_prefix}config logs setchannel #channel`.")
                 c = self.conn.cursor()
                 c.execute("INSERT INTO log_channels(guild_id,log_channel) VALUES(?,?)", (guild.id, channel.id))
                 self.conn.commit()
-                break  # stop looping through channels fuckin' hell love calm down
+                break  # stop looping through channels, we found one
 
     def cog_unload(self):
-        """Nicely close the database connection and stuff :)"""
+        """Nicely close the database connection and stuff"""
         self.conn.close()
 
 
