@@ -1,0 +1,11 @@
+# Jetbrains IDE files
+.idea/
+
+# Python virtual environment
+venv/
+
+# Compiled python files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
