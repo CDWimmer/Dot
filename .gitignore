@@ -9,3 +9,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+
+# Main executable that doesn't want uploading yet
+main.py
