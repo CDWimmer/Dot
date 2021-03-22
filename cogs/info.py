@@ -1,13 +1,11 @@
 from discord.ext import commands
-from config import *
-# import asyncio
-from discord import utils
 import discord
 from datetime import datetime
 
 
 class Info(commands.Cog):
     """Information"""
+
     def __init__(self, bot):
         self.bot = bot
         # self.guild = bot.get_guild(SERVER_ID)
@@ -19,7 +17,8 @@ class Info(commands.Cog):
         created = ctx.guild.created_at.date()
         age = datetime.now().date() - created
         total_members = ctx.guild.member_count
-        online_members = len([member for member in ctx.guild.members if member.status != discord.Status.offline and not member.bot])
+        online_members = len([member for member in ctx.guild.members if member.status != discord.Status.offline and not
+                              member.bot])
         embed = discord.Embed(title=f"__{ctx.guild.name}__", description=f"Guild information",
                               color=0xff00f7)
         embed.set_thumbnail(url=ctx.guild.icon_url)
@@ -31,7 +30,8 @@ class Info(commands.Cog):
 
     @commands.guild_only()
     @commands.command(help="Lists the server boosters", aliases=["whopremium", "listboosters", "showboosters",
-                                                                 "listboosts", "showboosts", "whosubscribe"])
+                                                                 "listboosts", "showboosts", "whosubscribe",
+                                                                 "boosters", "subscribers"])
     async def whoboost(self, ctx):
         members = ""
         for member in ctx.message.guild.premium_subscribers:
