@@ -1,7 +1,7 @@
 # coding: utf-8
 """
 Staff Contact cog for Dot the Discord Bot.
-Version 2021.03.22
+Version 2021.03.24
 
 This cog provides commands to allow regular users to send complaints/ suggestions/ questions to server staff in a
 managed way.
@@ -21,6 +21,7 @@ from discord.ext import commands
 from discord import utils
 import sqlite3
 
+# Todo: Move response command into this, track messages and give them IDs?
 CONFIG_FILE = "config_db.db"
 CONTACT_CONFIG_FILE = "staff_contact_db.db"
 
@@ -241,7 +242,44 @@ class StaffContact(commands.Cog):
         except Exception as e:
             await ctx.send(f"Something went wrong, please report this to the bot owner: {str(e)}")
 
-# ===================== Events ========================== #
+# ===================== Staff Commands ================== #
+
+    @commands.command(help="Send a DM response to a member. Arguments: [@User] [Your message]")
+    @commands.has_permissions(kick_members=True)
+    @commands.guild_only()
+    async def respond(self, ctx: commands.Context, member: discord.Member, *, message):
+        if len(message) > 1500:
+            await ctx.send("Please keep responses to less than 1800 characters.")
+        try:
+            embed = discord.Embed(title=f"Response from {ctx.guild.name} staff")
+            embed.add_field(name="Message", value=message)
+            await member.send(embed=embed)
+        except discord.Forbidden as e:
+            await ctx.send(f"I am not allowed to send a DM to that user. Error: {str(e)}")
+            return
+        except Exception as e:
+            await ctx.send(f"Something bad happened when trying to send a DM. Might be a problem at Discord. "
+                           f"Error: {str(e)}")
+            return
+        else:
+            await ctx.send("Successfully sent your response.")
+            # log message and author to mod-logs:
+            c = self.conn.cursor()
+            channel_id = c.execute("SELECT channel_id FROM contact_config WHERE guild_id=?",
+                                   [ctx.guild.id, ]).fetchall()[0][0]
+            if channel_id == "default":
+                c2 = self.config_conn.cursor()
+                channel_id = c2.execute("SELECT log_channel FROM log_channels WHERE guild_id=?",
+                                        (ctx.guild.id,)).fetchall()[0][0]
+            else:
+                pass  # keep channel_id as-is.
+            embed = discord.Embed(title="Staff sent a response to a member.")
+            embed.add_field(name="Staff", value=f"{ctx.author.name}#{ctx.author.discriminator}", inline=True)
+            embed.add_field(name="Member", value=f"{member.name}#{member.discriminator}", inline=True)
+            embed.add_field(name="Response", value=message, inline=False)
+            await ctx.guild.get_channel(int(channel_id)).send(embed=embed)
+        return
+    # ===================== Events ========================== #
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
