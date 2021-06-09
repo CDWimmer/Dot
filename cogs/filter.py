@@ -1,11 +1,14 @@
 # coding: utf-8
 """
 Word Filter cog for Dot the Discord bot.
-Version 2020.10.26b
+Version 2021.06.09
 
 A Configurable per-server word filter.
 
 Ensure that the bot has a log channel set up from Config Manager for this to send logs into.
+
+Logging stuff for the explicit purpose of moderation is fine:
+https://gist.github.com/meew0/a3168b8fbb02d5a5456a06461b9e829e
 
 Dependencies:
 -------------
@@ -19,11 +22,11 @@ import discord
 import sqlite3
 
 CONFIG_FILE = "config_db.db"
-FILTER_FILE = "filter_db.db"
+FILTER_CONFIG_FILE = "filter_db.db"
 
 
 # TODO: Fix it so it doesn't delete your command message that just removed a word from the whitelist or added a major
-#  filter word.
+#  filter word. Suggestions: 1-Add a user whitelist. or 2-Anyone with permission to use the commands.
 
 
 class WordFilter(commands.Cog):
@@ -46,7 +49,7 @@ class WordFilter(commands.Cog):
         # Connect to word filter DB:
         self.conn = None
         try:
-            self.conn = sqlite3.connect(FILTER_FILE)
+            self.conn = sqlite3.connect(FILTER_CONFIG_FILE)
             print(sqlite3.version)
         except sqlite3.Error as e:
             raise Exception(f"Connection to filter database failed! {str(e)}")
@@ -263,6 +266,8 @@ class WordFilter(commands.Cog):
             return  # don't care about DMs.
         if message.author == self.bot.user:
             return  # don't reply to ourselves lol.
+        if message.author.guild_permissions.ban_members:
+            return  # leave administrators alone.
 
         def get_log_channel():
             """Helper function to obtain the server's log channel. """
@@ -284,14 +289,18 @@ class WordFilter(commands.Cog):
                 channel = get_log_channel()  # helper function
                 await channel.send(f"Word filter detected a potentially minor offensive message:\n"
                                    f"{message.jump_url}\n"
-                                   f"Sent by {message.author.display_name}.")
+                                   f"Sent by {message.author.display_name} (id: `{message.author.id}`) in channel "
+                                   f"'{message.channel.mention} (id: `{message.channel.id}`)'.\n"
+                                   f"Message read:")
+                await channel.send(f"{message.content}")
         except KeyError:
             pass  # no words configured for that server I guess
         try:
             if any(x in msg_filtered for x in self.major_filter[message.guild.id]):
                 channel = get_log_channel()  # helper function
                 await channel.send(f"Word filter detected a potentially major offensive message and will delete it.\n"
-                                   f"Sent by {message.author.display_name} (id: {message.author.id}).\n"
+                                   f"Sent by {message.author.display_name} (id: `{message.author.id}`) in channel "
+                                   f"'{message.channel.mention} (id: `{message.channel.id}`)'.\n"
                                    f"Message read:")
                 await channel.send(f"{message.content}")
                 try:
@@ -306,6 +315,8 @@ class WordFilter(commands.Cog):
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         """Compare the before and after of a member update and check if it's done anything fancy"""
         # print("Member update detected")
+        if after.guild_permissions.ban_members:
+            return  # ignore admins!
         if before.status != after.status:
             pass  # ignore status changes
         if before.activity != after.activity:
